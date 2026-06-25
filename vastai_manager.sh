@@ -3,14 +3,14 @@
 #
 # 用法：
 #   本地：./vastai_manager.sh
-#   远程：bash <(curl -fsSL https://raw.githubusercontent.com/USER/REPO/main/vastai_manager.sh)
+#   远程：bash <(curl -fsSL https://raw.githubusercontent.com/wokiiii2025/Vastai/main/vastai_manager.sh)
 #
 # 环境变量（按需设置）：
 #   CIVITAI_API_TOKEN    Civitai API 访问令牌（下载 Civitai 源模型时需要）
-#   GITHUB_RAW_BASE      仓库 raw 文件根 URL，远程执行时用于自动下载 Python 脚本
+#   GITHUB_RAW_BASE      仓库 raw 文件根 URL（已内置默认值，通常无需手动设置）
 
 # ---- 远程引导（首次通过 curl|bash 执行时自动下载 Python 脚本） ----
-GITHUB_RAW_BASE="${GITHUB_RAW_BASE:-}"
+GITHUB_RAW_BASE="${GITHUB_RAW_BASE:-https://raw.githubusercontent.com/wokiiii2025/Vastai/main}"
 
 resolve_script_dir() {
     local src
@@ -27,22 +27,40 @@ PYTHON_SCRIPT="$SCRIPT_DIR/vastai_manager.py"
 
 if [[ ! -f "$PYTHON_SCRIPT" ]]; then
     echo "[引导] 检测到远程执行模式，正在下载管理脚本..."
-    if [[ -z "$GITHUB_RAW_BASE" ]]; then
-        echo "[错误] 请设置 GITHUB_RAW_BASE 环境变量指向仓库 raw 根 URL。"
-        echo "  示例: export GITHUB_RAW_BASE=https://raw.githubusercontent.com/USER/REPO/main"
-        echo "  然后重新执行本脚本。"
-        exit 1
-    fi
-
     mkdir -p "$SCRIPT_DIR"
     curl -fsSL "$GITHUB_RAW_BASE/vastai_manager.py" -o "$PYTHON_SCRIPT" || {
-        echo "[错误] 下载 Python 脚本失败，请检查网络或 GITHUB_RAW_BASE 设置。"
-        echo "  亦可手动克隆仓库后本地运行: git clone <REPO> && cd <REPO_DIR> && ./vastai_manager.sh"
+        echo "[错误] 下载 Python 脚本失败。"
+        echo "  当前 raw 地址: $GITHUB_RAW_BASE/vastai_manager.py"
+        echo "  请检查网络连接，或手动设置 GITHUB_RAW_BASE 环境变量后重试。"
+        echo "  亦可手动克隆仓库后本地运行: git clone https://github.com/wokiiii2025/Vastai.git && cd Vastai && ./vastai_manager.sh"
         exit 1
     }
     chmod +x "$PYTHON_SCRIPT" 2>/dev/null || true
     echo "[引导] 脚本就绪: $PYTHON_SCRIPT"
 fi
+
+# ---- 引导提示：Civitai API Token ----
+show_token_guide() {
+    if [[ -n "${CIVITAI_API_TOKEN:-}" ]]; then
+        return
+    fi
+    echo "┌──────────────────────────────────────────────────────────┐"
+    echo "│ 提示：未检测到 CIVITAI_API_TOKEN 环境变量                 │"
+    echo "│                                                        │"
+    echo "│ 菜单选项 4（Z-Image 模型）部分模型来自 Civitai，         │"
+    echo "│ 需要设置该 Token 才能下载。                              │"
+    echo "│                                                        │"
+    echo "│ 设置方法：                                              │"
+    echo "│   export CIVITAI_API_TOKEN=你的token                    │"
+    echo "│                                                        │"
+    echo "│ 获取 Token: https://civitai.com/user/account            │"
+    echo "│                                                        │"
+    echo "│ 如果不需要下载 Civitai 源模型，可忽略此提示。            │"
+    echo "└──────────────────────────────────────────────────────────┘"
+    echo
+}
+
+show_token_guide
 
 while true; do
     if [[ -t 1 && -n "$TERM" ]]; then
