@@ -39,46 +39,26 @@ if [[ ! -f "$PYTHON_SCRIPT" ]]; then
     echo "[引导] 脚本就绪: $PYTHON_SCRIPT"
 fi
 
-# ---- 引导提示：Civitai API Token ----
-show_token_guide() {
-    if [[ -n "${CIVITAI_API_TOKEN:-}" ]]; then
-        return
-    fi
-    echo "┌──────────────────────────────────────────────────────────┐"
-    echo "│ 提示：未检测到 CIVITAI_API_TOKEN 环境变量                 │"
-    echo "│                                                        │"
-    echo "│ 菜单选项 4（Z-Image 模型）部分模型来自 Civitai，         │"
-    echo "│ 需要设置该 Token 才能下载。                              │"
-    echo "│                                                        │"
-    echo "│ 设置方法：                                              │"
-    echo "│   export CIVITAI_API_TOKEN=你的token                    │"
-    echo "│                                                        │"
-    echo "│ 获取 Token: https://civitai.com/user/account            │"
-    echo "│                                                        │"
-    echo "│ 如果不需要下载 Civitai 源模型，可忽略此提示。            │"
-    echo "└──────────────────────────────────────────────────────────┘"
-    echo
-}
-
-show_token_guide
-
 while true; do
     if [[ -t 1 && -n "$TERM" ]]; then
         clear
     fi
-    echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓"
-    echo "┃                Vast.ai 实例管理工具                      ┃"
-    echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛"
+    cat <<'EOF'
+ __     __        _      _    _
+ \ \   / /_ _ ___| |_   / \  (_)
+  \ \ / / _` / __| __| / _ \ | |
+   \ V / (_| \__ \ |_ / ___ \| |
+    \_/ \__,_|___/\__/_/   \_\_|
+EOF
     echo
     echo "  1. Ollama 服务与模型管理"
     echo "  2. Vast.ai ComfyUI 本机检查（关键目录/文件/版本/启动链路）"
     echo "  3. Vast.ai ComfyUI 本机升级（检查→备份→升级→补丁→原方式重启→验证）"
-    echo "  4. 下载 ComfyUI Z-Image 模型（自动跳过已存在的）"
-    echo "  5. 下载 ComfyUI Qwen-Rapid-AIO 模型（自动跳过已存在的）"
-    echo "  6. 下载 ComfyUI Z-Image-Turbo 模型（仅 HuggingFace，自动跳过已存在的）"
+    echo "  4. 下载 ComfyUI Qwen-Rapid-AIO 模型（自动跳过已存在的）"
+    echo "  5. 下载 ComfyUI Z-Image-Turbo 模型（仅 HuggingFace，自动跳过已存在的）"
     echo "  0. 退出"
     echo
-    read -r -p "请选择操作 [0-6]: " choice
+    read -r -p "请选择操作 [0-5]: " choice
 
     case "$choice" in
         1)
@@ -94,14 +74,10 @@ while true; do
             read -r -p "按回车键返回菜单..."
             ;;
         4)
-            python3 "$PYTHON_SCRIPT" download-zimage-models
-            read -r -p "按回车键返回菜单..."
-            ;;
-        5)
             python3 "$PYTHON_SCRIPT" download-qwen-rapid-model
             read -r -p "按回车键返回菜单..."
             ;;
-        6)
+        5)
             python3 "$PYTHON_SCRIPT" download-zimage-turbo-models
             read -r -p "按回车键返回菜单..."
             ;;

@@ -67,6 +67,10 @@ ZIMAGE_TURBO_MODELS = [
         "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/diffusion_models/z_image_turbo_bf16.safetensors",
     },
     {
+        "subdir": "diffusion_models",
+        "url": "https://huggingface.co/SeeSee21/Z-Anime/resolve/main/diffusion_models/z-anime-distill-8step-bf16.safetensors",
+    },
+    {
         "subdir": "vae",
         "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
     },
@@ -95,9 +99,11 @@ def print_banner():
     if sys.stdout.isatty() and os.environ.get("TERM"):
         os.system('clear')
     print(f"{Colors.CYAN}{Colors.BOLD}")
-    print("┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓")
-    print("┃                Vast.ai 实例管理工具                  ┃")
-    print("┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛")
+    print(r""" __     __        _      _    _
+ \ \   / /_ _ ___| |_   / \  (_)
+  \ \ / / _` / __| __| / _ \ | |
+   \ V / (_| \__ \ |_ / ___ \| |
+    \_/ \__,_|___/\__/_/   \_\_|""")
     print(f"{Colors.NC}")
 
 def print_info(msg): print(f"{Colors.BLUE}[信息]{Colors.NC} {msg}")
@@ -1068,13 +1074,12 @@ def main_menu():
         print(f"  {Colors.BOLD}1.{Colors.NC} Ollama 服务与模型管理")
         print(f"  {Colors.BOLD}2.{Colors.NC} Vast.ai ComfyUI 本机检查（关键目录/文件/版本/启动链路）")
         print(f"  {Colors.BOLD}3.{Colors.NC} Vast.ai ComfyUI 本机升级（检查→备份→升级→补丁→原方式重启→验证）")
-        print(f"  {Colors.BOLD}4.{Colors.NC} 下载 ComfyUI Z-Image 模型 (自动跳过已存在的)")
-        print(f"  {Colors.BOLD}5.{Colors.NC} 下载 ComfyUI Qwen-Rapid-AIO 模型 (自动跳过已存在的)")
-        print(f"  {Colors.BOLD}6.{Colors.NC} 下载 ComfyUI Z-Image-Turbo 模型 (仅 HuggingFace，自动跳过已存在的)")
+        print(f"  {Colors.BOLD}4.{Colors.NC} 下载 ComfyUI Qwen-Rapid-AIO 模型 (自动跳过已存在的)")
+        print(f"  {Colors.BOLD}5.{Colors.NC} 下载 ComfyUI Z-Image-Turbo 模型 (仅 HuggingFace，自动跳过已存在的)")
         print(f"  {Colors.BOLD}0.{Colors.NC} 退出")
         print("-" * 60)
 
-        choice = input(f"{Colors.BOLD}请选择操作 [0-6]: {Colors.NC}").strip()
+        choice = input(f"{Colors.BOLD}请选择操作 [0-5]: {Colors.NC}").strip()
 
         if choice == '1': ollama_menu()
         elif choice == '2':
@@ -1083,9 +1088,8 @@ def main_menu():
         elif choice == '3':
             vast_comfyui_upgrade()
             input("\n按回车键返回菜单...")
-        elif choice == '4': download_zimage_models()
-        elif choice == '5': download_qwen_rapid_model()
-        elif choice == '6': download_zimage_turbo_models()
+        elif choice == '4': download_qwen_rapid_model()
+        elif choice == '5': download_zimage_turbo_models()
         elif choice == '0': break
 
 if __name__ == "__main__":
