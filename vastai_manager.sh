@@ -9,32 +9,38 @@
 #   CIVITAI_API_TOKEN    Civitai API 访问令牌（下载 Civitai 源模型时需要）
 #   GITHUB_RAW_BASE      仓库 raw 文件根 URL（已内置默认值，通常无需手动设置）
 
-# ---- 远程引导（首次通过 curl|bash 执行时自动下载 Python 脚本） ----
+# ---- 远程引导（通过 curl|bash 执行时刷新 Python 脚本） ----
 GITHUB_RAW_BASE="${GITHUB_RAW_BASE:-https://raw.githubusercontent.com/wokiiii2025/Vastai/main}"
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-$0}"
+IS_REMOTE_BOOTSTRAP=0
+if [[ "$SCRIPT_SOURCE" == /dev/fd/* ]] || [[ "$SCRIPT_SOURCE" == bash ]] || [[ "$SCRIPT_SOURCE" == /proc/self/fd/* ]]; then
+    IS_REMOTE_BOOTSTRAP=1
+fi
 
 resolve_script_dir() {
-    local src
-    src="${BASH_SOURCE[0]:-$0}"
-    if [[ "$src" == /dev/fd/* ]] || [[ "$src" == bash ]] || [[ "$src" == /proc/self/fd/* ]]; then
+    if [[ "$IS_REMOTE_BOOTSTRAP" == "1" ]]; then
         echo "/tmp/vastai-manager"
         return
     fi
-    cd "$(dirname "$src")" 2>/dev/null && pwd || echo "/tmp/vastai-manager"
+    cd "$(dirname "$SCRIPT_SOURCE")" 2>/dev/null && pwd || echo "/tmp/vastai-manager"
 }
 
 SCRIPT_DIR="$(resolve_script_dir)"
 PYTHON_SCRIPT="$SCRIPT_DIR/vastai_manager.py"
 
-if [[ ! -f "$PYTHON_SCRIPT" ]]; then
-    echo "[引导] 检测到远程执行模式，正在下载管理脚本..."
+if [[ "$IS_REMOTE_BOOTSTRAP" == "1" || ! -f "$PYTHON_SCRIPT" ]]; then
+    echo "[引导] 正在刷新管理脚本..."
     mkdir -p "$SCRIPT_DIR"
-    curl -fsSL "$GITHUB_RAW_BASE/vastai_manager.py" -o "$PYTHON_SCRIPT" || {
+    PYTHON_SCRIPT_TMP="$PYTHON_SCRIPT.download"
+    curl -fsSL "$GITHUB_RAW_BASE/vastai_manager.py" -o "$PYTHON_SCRIPT_TMP" || {
+        rm -f "$PYTHON_SCRIPT_TMP"
         echo "[错误] 下载 Python 脚本失败。"
         echo "  当前 raw 地址: $GITHUB_RAW_BASE/vastai_manager.py"
         echo "  请检查网络连接，或手动设置 GITHUB_RAW_BASE 环境变量后重试。"
         echo "  亦可手动克隆仓库后本地运行: git clone https://github.com/wokiiii2025/Vastai.git && cd Vastai && ./vastai_manager.sh"
         exit 1
     }
+    mv "$PYTHON_SCRIPT_TMP" "$PYTHON_SCRIPT"
     chmod +x "$PYTHON_SCRIPT" 2>/dev/null || true
     echo "[引导] 脚本就绪: $PYTHON_SCRIPT"
 fi
