@@ -57,23 +57,46 @@ ZIMAGE_OBSOLETE_MODELS = [
 ]
 
 # Z-Image-Turbo 模型下载配置（仅 HuggingFace，不涉及 Civitai token）
-ZIMAGE_TURBO_MODELS = [
+ZIMAGE_TURBO_TEXT_ENCODER_MODEL = {
+    "subdir": "text_encoders",
+    "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors",
+}
+ZIMAGE_TURBO_VAE_MODEL = {
+    "subdir": "vae",
+    "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
+}
+ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS = [
     {
-        "subdir": "text_encoders",
-        "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors",
-    },
-    {
+        "key": "official",
+        "name": "官方 Z-Image-Turbo BF16",
         "subdir": "diffusion_models",
         "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/diffusion_models/z_image_turbo_bf16.safetensors",
     },
     {
+        "key": "2602-nsfw",
+        "name": "2602 NSFW ZIT BSY BF16",
         "subdir": "diffusion_models",
-        "url": "https://huggingface.co/SeeSee21/Z-Anime/resolve/main/diffusion_models/z-anime-distill-8step-bf16.safetensors",
+        "url": "https://huggingface.co/wiikoo/checkpoint/resolve/main/tongyi/2602_NSFW_ZIT_BSY_bf16.safetensors",
+    },
+]
+ZIMAGE_TURBO_LORA_MODEL_OPTIONS = [
+    {
+        "key": "none",
+        "name": "不下载 LoRA",
+        "subdir": None,
+        "url": None,
     },
     {
-        "subdir": "vae",
-        "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
+        "key": "zpenis-v9",
+        "name": "zpenis v9 erect limited",
+        "subdir": "loras",
+        "url": "https://huggingface.co/wiikoo/checkpoint/resolve/main/tongyi/zpenis_v9_erect_limited_000033300.safetensors",
     },
+]
+ZIMAGE_TURBO_MODELS = [
+    ZIMAGE_TURBO_TEXT_ENCODER_MODEL,
+    ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS[0],
+    ZIMAGE_TURBO_VAE_MODEL,
 ]
 
 # Qwen-Rapid-AIO 模型下载配置
@@ -618,6 +641,84 @@ def format_bytes(size):
 def get_zimage_model_specs():
     return ZIMAGE_MODELS
 
+def get_zimage_turbo_diffusion_option(choice=None):
+    normalized = (choice or "").strip().lower().replace("_", "-")
+    if normalized in ("", "1", "official", "default", "turbo"):
+        return dict(ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS[0])
+    if normalized in ("2", "2602", "2602-nsfw", "nsfw", "tongyi", "bsy"):
+        return dict(ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS[1])
+    return None
+
+def get_zimage_turbo_lora_option(choice=None):
+    normalized = (choice or "").strip().lower().replace("_", "-")
+    if normalized in ("", "0", "1", "none", "no", "n", "skip"):
+        return dict(ZIMAGE_TURBO_LORA_MODEL_OPTIONS[0])
+    if normalized in ("2", "yes", "y", "zpenis", "zpenis-v9", "lora"):
+        return dict(ZIMAGE_TURBO_LORA_MODEL_OPTIONS[1])
+    return None
+
+def choose_zimage_turbo_diffusion_model():
+    env_choice = os.environ.get("ZIMAGE_TURBO_DIFFUSION_VARIANT")
+    if env_choice:
+        option = get_zimage_turbo_diffusion_option(env_choice)
+        if option:
+            print_info(f"使用环境变量 ZIMAGE_TURBO_DIFFUSION_VARIANT={env_choice}: {option['name']}")
+            return option
+        print_warning(f"无效的 ZIMAGE_TURBO_DIFFUSION_VARIANT={env_choice}，默认选择官方模型。")
+        return get_zimage_turbo_diffusion_option("official")
+
+    if not sys.stdin.isatty():
+        option = get_zimage_turbo_diffusion_option("official")
+        print_info(f"未检测到交互输入，默认选择: {option['name']}")
+        return option
+
+    print("请选择 diffusion_models 模型来源：")
+    for index, option in enumerate(ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS, start=1):
+        print(f"  {index}. {option['name']}")
+    choice = input("请选择 [1-2，默认 1]: ").strip()
+    option = get_zimage_turbo_diffusion_option(choice)
+    if not option:
+        print_warning("无效选择，默认选择官方模型。")
+        option = get_zimage_turbo_diffusion_option("official")
+    print_info(f"已选择 diffusion: {option['name']}")
+    return option
+
+def choose_zimage_turbo_lora_model():
+    env_choice = os.environ.get("ZIMAGE_TURBO_LORA_VARIANT")
+    if env_choice:
+        option = get_zimage_turbo_lora_option(env_choice)
+        if option:
+            print_info(f"使用环境变量 ZIMAGE_TURBO_LORA_VARIANT={env_choice}: {option['name']}")
+            return option
+        print_warning(f"无效的 ZIMAGE_TURBO_LORA_VARIANT={env_choice}，默认不下载 LoRA。")
+        return get_zimage_turbo_lora_option("none")
+
+    if not sys.stdin.isatty():
+        option = get_zimage_turbo_lora_option("none")
+        print_info(f"未检测到交互输入，默认选择: {option['name']}")
+        return option
+
+    print("请选择是否下载 Z-Image-Turbo LoRA：")
+    for index, option in enumerate(ZIMAGE_TURBO_LORA_MODEL_OPTIONS, start=1):
+        print(f"  {index}. {option['name']}")
+    choice = input("请选择 [1-2，默认 1]: ").strip()
+    option = get_zimage_turbo_lora_option(choice)
+    if not option:
+        print_warning("无效选择，默认不下载 LoRA。")
+        option = get_zimage_turbo_lora_option("none")
+    print_info(f"已选择 LoRA: {option['name']}")
+    return option
+
+def get_zimage_turbo_model_specs(diffusion_option=None, lora_option=None):
+    specs = [
+        dict(ZIMAGE_TURBO_TEXT_ENCODER_MODEL),
+        dict(diffusion_option or get_zimage_turbo_diffusion_option("official")),
+        dict(ZIMAGE_TURBO_VAE_MODEL),
+    ]
+    if lora_option and lora_option.get("url"):
+        specs.append(dict(lora_option))
+    return specs
+
 def resolve_model_target_path(model_spec):
     filename = model_spec.get("filename")
     if model_spec.get("filename_from_response") and not filename:
@@ -782,9 +883,11 @@ def download_zimage_models():
 
 def download_zimage_turbo_models():
     print_banner()
-    print_info("下载 ComfyUI Z-Image-Turbo 模型（仅 HuggingFace 源）")
+    print_info("下载 ComfyUI Z-Image-Turbo 模型（diffusion/LoRA 可选，其他默认）")
     print_info(f"目标根目录: {COMFYUI_MODELS_ROOT}")
-    _download_zimage_models_impl(ZIMAGE_TURBO_MODELS)
+    diffusion_option = choose_zimage_turbo_diffusion_model()
+    lora_option = choose_zimage_turbo_lora_model()
+    _download_zimage_models_impl(get_zimage_turbo_model_specs(diffusion_option, lora_option))
     input("\n按回车键返回菜单...")
 
 def is_running(port):
@@ -924,10 +1027,10 @@ def download_qwen_rapid_model():
 def manage_autostart():
     print_banner()
     print_info("步骤 3: 设置 Ollama 开机自动启动")
-    
+
     # 检测是否支持 systemd
     has_systemd = os.path.isdir("/run/systemd/system")
-    
+
     if is_root() and has_systemd:
         print_info("检测到 Systemd，正在配置服务...")
         config = require_ollama_config()
@@ -965,7 +1068,7 @@ WantedBy=multi-user.target
         # 构造重启时运行的命令
         script_path = os.path.abspath(__file__)
         cron_cmd = f"@reboot python3 {script_path} serve --port {port}\n"
-        
+
         try:
             # 读取现有 crontab
             current_cron = run_cmd("crontab -l", capture=True) or ""
@@ -979,7 +1082,7 @@ WantedBy=multi-user.target
         except Exception as e:
             print_error(f"Crontab 配置失败: {e}")
             print_info("请手动尝试: (crontab -l ; echo '@reboot python3 ...') | crontab -")
-    
+
     input("\n按回车键返回菜单...")
 
 def manage_service(action):
@@ -998,7 +1101,7 @@ def manage_service(action):
         print_info("正在停止服务...")
         _stop_existing_ollama()
         print_success("服务已关闭。")
-    
+
     input("\n按回车键返回菜单...")
 
 # ==========================================
@@ -1008,15 +1111,15 @@ def ollama_menu():
     # 首次进入先执行一次全面体检
     print_banner()
     print_info("正在执行系统环境体检...")
-    
+
     while True:
         config = load_config()
         port = config.get('port') or ""
-        
+
         # 1. 检查安装状态
         ollama_path = shutil.which('ollama')
         ollama_ver = run_cmd("ollama --version", capture=True) if ollama_path else "未安装"
-        
+
         # 2. 检查服务状态
         is_up = is_running(port) if port else False
         if port:
@@ -1025,7 +1128,7 @@ def ollama_menu():
         else:
             status_str = f"{Colors.YELLOW}○ 未配置端口{Colors.NC}"
             port_label = "未配置"
-        
+
         # 3. 检查已有的模型
         model_list = "无"
         if is_up:
@@ -1035,14 +1138,14 @@ def ollama_menu():
                 lines = raw_models.split('\n')[1:]
                 names = [l.split()[0] for l in lines if l.strip()]
                 model_list = ", ".join(names) if names else "无"
-        
+
         print_banner()
         print(f"{Colors.BOLD}当前系统状态:{Colors.NC}")
         print(f"  - Ollama 主程序: {Colors.CYAN}{ollama_ver}{Colors.NC} ({ollama_path or 'N/A'})")
         print(f"  - 后台服务状态: {status_str} (端口: {port_label})")
         print(f"  - 已导入的模型: {Colors.YELLOW}{model_list}{Colors.NC}")
         print("-" * 60)
-        
+
         print(f"  {Colors.BOLD}1.{Colors.NC} 安装/更新 Ollama 并配置端口")
         print(f"  {Colors.BOLD}2.{Colors.NC} 下载并导入 Qwen 模型 (自动跳过已存在的)")
         print(f"  {Colors.BOLD}3.{Colors.NC} 配置 Ollama 开机自启动")
@@ -1051,15 +1154,15 @@ def ollama_menu():
         print(f"  {Colors.BOLD}6.{Colors.NC} 查看日志 (Tail)")
         print(f"  {Colors.BOLD}0.{Colors.NC} 退出")
         print("-" * 60)
-        
+
         choice = input(f"{Colors.BOLD}请选择操作 [0-6]: {Colors.NC}").strip()
-        
+
         if choice == '1': install_ollama()
         elif choice == '2': init_qwen_model()
         elif choice == '3': manage_autostart()
         elif choice == '4': manage_service("start")
         elif choice == '5': manage_service("stop")
-        elif choice == '6': 
+        elif choice == '6':
             log_path = os.path.join(LOG_DIR, 'ollama.log')
             if os.path.exists(log_path):
                 os.system(f"tail -n 50 -f {log_path}")
@@ -1075,7 +1178,7 @@ def main_menu():
         print(f"  {Colors.BOLD}2.{Colors.NC} Vast.ai ComfyUI 本机检查（关键目录/文件/版本/启动链路）")
         print(f"  {Colors.BOLD}3.{Colors.NC} Vast.ai ComfyUI 本机升级（检查→备份→升级→补丁→原方式重启→验证）")
         print(f"  {Colors.BOLD}4.{Colors.NC} 下载 ComfyUI Qwen-Rapid-AIO 模型 (自动跳过已存在的)")
-        print(f"  {Colors.BOLD}5.{Colors.NC} 下载 ComfyUI Z-Image-Turbo 模型 (仅 HuggingFace，自动跳过已存在的)")
+        print(f"  {Colors.BOLD}5.{Colors.NC} 下载 ComfyUI Z-Image-Turbo 模型 (diffusion/LoRA 可选，其他默认)")
         print(f"  {Colors.BOLD}0.{Colors.NC} 退出")
         print("-" * 60)
 
@@ -1128,7 +1231,9 @@ if __name__ == "__main__":
             ok = _download_zimage_models_impl(get_zimage_model_specs())
             sys.exit(0 if ok else 1)
         elif args.action == "download-zimage-turbo-models":
-            ok = _download_zimage_models_impl(ZIMAGE_TURBO_MODELS)
+            diffusion_option = choose_zimage_turbo_diffusion_model()
+            lora_option = choose_zimage_turbo_lora_model()
+            ok = _download_zimage_models_impl(get_zimage_turbo_model_specs(diffusion_option, lora_option))
             sys.exit(0 if ok else 1)
         elif args.action == "download-qwen-rapid-model":
             ok = _download_zimage_models_impl([QWEN_RAPID_AIO_MODEL])

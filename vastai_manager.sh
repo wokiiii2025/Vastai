@@ -55,7 +55,7 @@ EOF
     echo "  2. Vast.ai ComfyUI 本机检查（关键目录/文件/版本/启动链路）"
     echo "  3. Vast.ai ComfyUI 本机升级（检查→备份→升级→补丁→原方式重启→验证）"
     echo "  4. 下载 ComfyUI Qwen-Rapid-AIO 模型（自动跳过已存在的）"
-    echo "  5. 下载 ComfyUI Z-Image-Turbo 模型（仅 HuggingFace，自动跳过已存在的）"
+    echo "  5. 下载 ComfyUI Z-Image-Turbo 模型（diffusion/LoRA 可选，其他默认）"
     echo "  0. 退出"
     echo
     read -r -p "请选择操作 [0-5]: " choice
