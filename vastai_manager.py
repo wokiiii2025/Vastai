@@ -105,6 +105,50 @@ QWEN_RAPID_AIO_MODEL = {
     "url": "https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO/resolve/main/v17/Qwen-Rapid-AIO-NSFW-v17.safetensors",
 }
 
+# video-i2v-fl-api-2.json 工作流所需的 Wan 2.2 I2V 模型
+WAN22_I2V_FL_MODELS = [
+    {
+        "subdir": "clip_vision",
+        "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors",
+    },
+    {
+        "subdir": "vae",
+        "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors",
+    },
+    {
+        "subdir": "text_encoders",
+        "url": "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors",
+    },
+    {
+        "subdir": "diffusion_models/GGUF",
+        "url": "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/HighNoise/Wan2.2-I2V-A14B-HighNoise-Q5_K_M.gguf",
+    },
+    {
+        "subdir": "diffusion_models/GGUF",
+        "url": "https://huggingface.co/QuantStack/Wan2.2-I2V-A14B-GGUF/resolve/main/LowNoise/Wan2.2-I2V-A14B-LowNoise-Q5_K_M.gguf",
+    },
+    {
+        "subdir": "loras/lightx2v",
+        "url": "https://huggingface.co/Kutches/UncensoredV2/resolve/main/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors",
+    },
+    {
+        "subdir": "loras/WAN2.2",
+        "url": "https://huggingface.co/lopi999/Wan2.2-I2V_General-NSFW-LoRA/resolve/main/NSFW-22-H-e8.safetensors",
+    },
+    {
+        "subdir": "loras/WAN2.2",
+        "url": "https://huggingface.co/lopi999/Wan2.2-I2V_General-NSFW-LoRA/resolve/main/NSFW-22-L-e8.safetensors",
+    },
+    {
+        "subdir": "loras/Video Loras/wan 2.2",
+        "url": "https://huggingface.co/adbrasi/wanlotest/resolve/main/pworship_high_noise.safetensors",
+    },
+    {
+        "subdir": "loras/Video Loras/wan 2.2",
+        "url": "https://huggingface.co/adbrasi/wanlotest/resolve/main/pworship_low_noise.safetensors",
+    },
+]
+
 # ComfyUI 自定义扩展（用户清单中的重复仓库已去重）
 COMFYUI_CUSTOM_NODES_DIR = "/workspace/ComfyUI/custom_nodes"
 COMFYUI_CUSTOM_NODE_REPOS = [
@@ -867,8 +911,9 @@ def download_file_with_progress(url, dest_path, timeout=60, filename_from_respon
         print_error(f"下载失败: {filename} - {e}")
         return "failed"
 
-def _download_zimage_models_impl(model_specs):
-    cleanup_obsolete_zimage_models()
+def _download_zimage_models_impl(model_specs, task_name="Z-Image 模型", cleanup_obsolete=True):
+    if cleanup_obsolete:
+        cleanup_obsolete_zimage_models()
     results = {"success": 0, "skipped": 0, "failed": 0}
     for index, model_spec in enumerate(model_specs, start=1):
         try:
@@ -896,7 +941,7 @@ def _download_zimage_models_impl(model_specs):
 
     print("-" * 60)
     print_success(
-        f"Z-Image 模型下载任务完成：成功 {results['success']}，跳过 {results['skipped']}，失败 {results['failed']}。"
+        f"{task_name}下载任务完成：成功 {results['success']}，跳过 {results['skipped']}，失败 {results['failed']}。"
     )
     return results["failed"] == 0
 
@@ -1048,6 +1093,18 @@ def download_qwen_rapid_model():
     print_info("下载 ComfyUI Qwen-Rapid-AIO 模型")
     print_info(f"目标目录: {os.path.join(COMFYUI_MODELS_ROOT, 'checkpoints')}")
     _download_zimage_models_impl([QWEN_RAPID_AIO_MODEL])
+    input("\n按回车键返回菜单...")
+
+def download_wan22_i2v_fl_models():
+    print_banner()
+    print_info("下载 video-i2v-fl-api-2 工作流所需的 Wan 2.2 I2V 模型")
+    print_info(f"目标根目录: {COMFYUI_MODELS_ROOT}")
+    print_warning("完整模型约 32.92 GB，请确认磁盘空间充足。")
+    _download_zimage_models_impl(
+        WAN22_I2V_FL_MODELS,
+        task_name="Wan 2.2 I2V 工作流模型",
+        cleanup_obsolete=False,
+    )
     input("\n按回车键返回菜单...")
 
 def manage_autostart():
@@ -1273,10 +1330,11 @@ def main_menu():
         print(f"  {Colors.BOLD}4.{Colors.NC} 下载 ComfyUI Qwen-Rapid-AIO 模型 (自动跳过已存在的)")
         print(f"  {Colors.BOLD}5.{Colors.NC} 下载 ComfyUI Z-Image-Turbo 模型 (diffusion/LoRA 可选，其他默认)")
         print(f"  {Colors.BOLD}6.{Colors.NC} 一键安装 ComfyUI 自定义扩展")
+        print(f"  {Colors.BOLD}7.{Colors.NC} 下载 Wan 2.2 I2V 工作流全部模型")
         print(f"  {Colors.BOLD}0.{Colors.NC} 退出")
         print("-" * 60)
 
-        choice = input(f"{Colors.BOLD}请选择操作 [0-6]: {Colors.NC}").strip()
+        choice = input(f"{Colors.BOLD}请选择操作 [0-7]: {Colors.NC}").strip()
 
         if choice == '1': ollama_menu()
         elif choice == '2':
@@ -1290,6 +1348,7 @@ def main_menu():
         elif choice == '6':
             install_comfyui_custom_nodes()
             input("\n按回车键返回菜单...")
+        elif choice == '7': download_wan22_i2v_fl_models()
         elif choice == '0': break
 
 if __name__ == "__main__":
@@ -1307,6 +1366,7 @@ if __name__ == "__main__":
             "vast-comfyui-check",
             "vast-comfyui-upgrade",
             "install-comfyui-custom-nodes",
+            "download-wan22-i2v-fl-models",
         ])
         parser.add_argument("--port")
         parser.add_argument("--host")
@@ -1338,6 +1398,13 @@ if __name__ == "__main__":
             sys.exit(0 if ok else 1)
         elif args.action == "install-comfyui-custom-nodes":
             sys.exit(0 if install_comfyui_custom_nodes() else 1)
+        elif args.action == "download-wan22-i2v-fl-models":
+            ok = _download_zimage_models_impl(
+                WAN22_I2V_FL_MODELS,
+                task_name="Wan 2.2 I2V 工作流模型",
+                cleanup_obsolete=False,
+            )
+            sys.exit(0 if ok else 1)
         elif args.action in ("vast-comfyui-check", "vast-comfyui-upgrade"):
             if bool(args.ssh_host) != bool(args.ssh_port):
                 parser.error("--ssh-host 和 --ssh-port 需要同时提供；不提供则默认本机执行")

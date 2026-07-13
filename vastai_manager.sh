@@ -63,9 +63,10 @@ EOF
     echo "  4. 下载 ComfyUI Qwen-Rapid-AIO 模型（自动跳过已存在的）"
     echo "  5. 下载 ComfyUI Z-Image-Turbo 模型（diffusion/LoRA 可选，其他默认）"
     echo "  6. 一键安装 ComfyUI 自定义扩展"
+    echo "  7. 下载 Wan 2.2 I2V 工作流全部模型"
     echo "  0. 退出"
     echo
-    read -r -p "请选择操作 [0-6]: " choice
+    read -r -p "请选择操作 [0-7]: " choice
 
     case "$choice" in
         1)
@@ -90,6 +91,10 @@ EOF
             ;;
         6)
             python3 "$PYTHON_SCRIPT" install-comfyui-custom-nodes
+            read -r -p "按回车键返回菜单..."
+            ;;
+        7)
+            python3 "$PYTHON_SCRIPT" download-wan22-i2v-fl-models
             read -r -p "按回车键返回菜单..."
             ;;
         0)
