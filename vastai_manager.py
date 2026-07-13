@@ -105,6 +105,32 @@ QWEN_RAPID_AIO_MODEL = {
     "url": "https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO/resolve/main/v17/Qwen-Rapid-AIO-NSFW-v17.safetensors",
 }
 
+# ComfyUI 自定义扩展（用户清单中的重复仓库已去重）
+COMFYUI_CUSTOM_NODES_DIR = "/workspace/ComfyUI/custom_nodes"
+COMFYUI_CUSTOM_NODE_REPOS = [
+    "https://github.com/ltdrdata/ComfyUI-Manager.git",
+    "https://github.com/Fannovel16/comfyui_controlnet_aux.git",
+    "https://github.com/Lightricks/ComfyUI-LTXVideo.git",
+    "https://github.com/kijai/ComfyUI-KJNodes.git",
+    "https://github.com/rgthree/rgthree-comfy.git",
+    "https://github.com/yolain/ComfyUI-Easy-Use.git",
+    "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git",
+    "https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git",
+    "https://github.com/cubiq/ComfyUI_essentials.git",
+    "https://github.com/aria1th/ComfyUI-LogicUtils.git",
+    "https://github.com/Mattabyte/ComfyUI-LTXVideo-Registry_Mattabyte.git",
+    "https://github.com/SethRobinson/comfyui-workflow-to-api-converter-endpoint.git",
+    "https://github.com/chflame163/ComfyUI_LayerStyle.git",
+    "https://github.com/1038lab/ComfyUI-RMBG.git",
+    "https://github.com/wallen0322/ComfyUI-Wan22FMLF.git",
+    "https://github.com/bollerdominik/ComfyUI-load-lora-from-url.git",
+    "https://github.com/calcuis/gguf.git",
+    "https://github.com/lihaoyun6/ComfyUI-Segformer_Ultra_Fast.git",
+    "https://github.com/city96/ComfyUI-GGUF.git",
+    "https://github.com/walke2019/ComfyUI-GGUF-VLM.git",
+    "https://github.com/weekii/comfyui-save-image-pro.git",
+]
+
 # ==========================================
 # 视觉美化工具
 # ==========================================
@@ -1171,6 +1197,73 @@ def ollama_menu():
                 time.sleep(2)
         elif choice == '0': break
 
+def install_comfyui_custom_nodes():
+    print_info("一键安装 ComfyUI 自定义扩展")
+    target_root = Path(COMFYUI_CUSTOM_NODES_DIR)
+    comfy_root = target_root.parent
+
+    if not comfy_root.is_dir():
+        print_error(f"ComfyUI 目录不存在: {comfy_root}")
+        return False
+    if not shutil.which("git"):
+        print_error("未找到 git，无法安装自定义扩展。")
+        return False
+
+    target_root.mkdir(parents=True, exist_ok=True)
+    installed = []
+    skipped = []
+    failed = []
+
+    for repo_url in COMFYUI_CUSTOM_NODE_REPOS:
+        repo_name = repo_url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
+        target = target_root / repo_name
+        is_new_install = not target.exists()
+        if target.exists():
+            print_warning(f"已存在，不覆盖仓库内容: {target}")
+            skipped.append(repo_name)
+        else:
+            print_info(f"正在安装 {repo_name}...")
+            clone = subprocess.run(
+                ["git", "clone", "--depth", "1", repo_url, str(target)],
+                text=True,
+            )
+            if clone.returncode != 0:
+                print_error(f"克隆失败: {repo_name}")
+                failed.append(repo_name)
+                continue
+
+        requirements = target / "requirements.txt"
+        if requirements.is_file():
+            if not Path(VAST_VENV_ACTIVATE).is_file() or not shutil.which("uv"):
+                print_error(f"无法安装 {repo_name} 的依赖：缺少 /venv/main 或 uv。")
+                failed.append(f"{repo_name}（依赖）")
+                if is_new_install:
+                    installed.append(repo_name)
+                continue
+            dependency_install = subprocess.run([
+                "bash", "-lc",
+                f". {VAST_VENV_ACTIVATE} && uv pip --no-cache-dir install -r {requirements}",
+            ], text=True)
+            if dependency_install.returncode != 0:
+                print_error(f"依赖安装失败: {repo_name}")
+                failed.append(f"{repo_name}（依赖）")
+                if is_new_install:
+                    installed.append(repo_name)
+                continue
+
+        if is_new_install:
+            installed.append(repo_name)
+            print_success(f"安装完成: {repo_name}")
+
+    print("-" * 60)
+    print_info(f"新安装: {len(installed)}；已存在跳过: {len(skipped)}；失败: {len(failed)}")
+    if failed:
+        print_error("失败项: " + ", ".join(failed))
+        return False
+    print_success(f"自定义扩展已安装到 {target_root}")
+    print_warning("请按原有方式重启 ComfyUI，使新扩展生效。")
+    return True
+
 def main_menu():
     while True:
         print_banner()
@@ -1179,10 +1272,11 @@ def main_menu():
         print(f"  {Colors.BOLD}3.{Colors.NC} Vast.ai ComfyUI 本机升级（检查→备份→升级→补丁→原方式重启→验证）")
         print(f"  {Colors.BOLD}4.{Colors.NC} 下载 ComfyUI Qwen-Rapid-AIO 模型 (自动跳过已存在的)")
         print(f"  {Colors.BOLD}5.{Colors.NC} 下载 ComfyUI Z-Image-Turbo 模型 (diffusion/LoRA 可选，其他默认)")
+        print(f"  {Colors.BOLD}6.{Colors.NC} 一键安装 ComfyUI 自定义扩展")
         print(f"  {Colors.BOLD}0.{Colors.NC} 退出")
         print("-" * 60)
 
-        choice = input(f"{Colors.BOLD}请选择操作 [0-5]: {Colors.NC}").strip()
+        choice = input(f"{Colors.BOLD}请选择操作 [0-6]: {Colors.NC}").strip()
 
         if choice == '1': ollama_menu()
         elif choice == '2':
@@ -1193,6 +1287,9 @@ def main_menu():
             input("\n按回车键返回菜单...")
         elif choice == '4': download_qwen_rapid_model()
         elif choice == '5': download_zimage_turbo_models()
+        elif choice == '6':
+            install_comfyui_custom_nodes()
+            input("\n按回车键返回菜单...")
         elif choice == '0': break
 
 if __name__ == "__main__":
@@ -1209,6 +1306,7 @@ if __name__ == "__main__":
             "download-qwen-rapid-model",
             "vast-comfyui-check",
             "vast-comfyui-upgrade",
+            "install-comfyui-custom-nodes",
         ])
         parser.add_argument("--port")
         parser.add_argument("--host")
@@ -1238,6 +1336,8 @@ if __name__ == "__main__":
         elif args.action == "download-qwen-rapid-model":
             ok = _download_zimage_models_impl([QWEN_RAPID_AIO_MODEL])
             sys.exit(0 if ok else 1)
+        elif args.action == "install-comfyui-custom-nodes":
+            sys.exit(0 if install_comfyui_custom_nodes() else 1)
         elif args.action in ("vast-comfyui-check", "vast-comfyui-upgrade"):
             if bool(args.ssh_host) != bool(args.ssh_port):
                 parser.error("--ssh-host 和 --ssh-port 需要同时提供；不提供则默认本机执行")

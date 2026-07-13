@@ -62,9 +62,10 @@ EOF
     echo "  3. Vast.ai ComfyUI 本机升级（检查→备份→升级→补丁→原方式重启→验证）"
     echo "  4. 下载 ComfyUI Qwen-Rapid-AIO 模型（自动跳过已存在的）"
     echo "  5. 下载 ComfyUI Z-Image-Turbo 模型（diffusion/LoRA 可选，其他默认）"
+    echo "  6. 一键安装 ComfyUI 自定义扩展"
     echo "  0. 退出"
     echo
-    read -r -p "请选择操作 [0-5]: " choice
+    read -r -p "请选择操作 [0-6]: " choice
 
     case "$choice" in
         1)
@@ -85,6 +86,10 @@ EOF
             ;;
         5)
             python3 "$PYTHON_SCRIPT" download-zimage-turbo-models
+            read -r -p "按回车键返回菜单..."
+            ;;
+        6)
+            python3 "$PYTHON_SCRIPT" install-comfyui-custom-nodes
             read -r -p "按回车键返回菜单..."
             ;;
         0)
