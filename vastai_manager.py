@@ -9,6 +9,7 @@ import urllib.request
 import urllib.parse
 import json
 import re
+import tempfile
 from pathlib import Path
 
 # ==========================================
@@ -818,6 +819,90 @@ def build_model_download_url(model_spec):
         url = urllib.parse.urlunparse(parsed._replace(query=urllib.parse.urlencode(query)))
     return url
 
+def parse_huggingface_url(url):
+    parsed = urllib.parse.urlparse(url)
+    if parsed.netloc != "huggingface.co":
+        return None
+    parts = parsed.path.strip("/").split("/")
+    if len(parts) < 5 or parts[2] != "resolve":
+        raise ValueError(f"不支持的 Hugging Face 下载地址: {url}")
+    return {
+        "repo_id": "/".join(parts[:2]),
+        "revision": urllib.parse.unquote(parts[3]),
+        "filename": urllib.parse.unquote("/".join(parts[4:])),
+    }
+
+def ensure_hf_cli():
+    candidates = ["/venv/main/bin/hf", shutil.which("hf")]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+
+    venv_python = "/venv/main/bin/python"
+    uv_path = shutil.which("uv")
+    if not os.path.isfile(venv_python) or not uv_path:
+        raise RuntimeError("缺少 Hugging Face 官方 hf CLI，且无法通过 /venv/main + uv 自动安装。")
+
+    print_info("正在通过 /venv/main 安装 Hugging Face 官方 CLI...")
+    install = subprocess.run([
+        uv_path,
+        "pip",
+        "--python", venv_python,
+        "--no-cache-dir",
+        "install",
+        "huggingface_hub",
+    ], text=True)
+    hf_path = "/venv/main/bin/hf"
+    if install.returncode != 0 or not os.path.isfile(hf_path):
+        raise RuntimeError("Hugging Face 官方 hf CLI 安装失败。")
+    return hf_path
+
+def create_hf_task_cache(base_dir):
+    os.makedirs(base_dir, exist_ok=True)
+    return tempfile.mkdtemp(prefix=".vastai-hf-", dir=base_dir)
+
+def cleanup_hf_task_cache(cache_dir):
+    if cache_dir and os.path.isdir(cache_dir):
+        shutil.rmtree(cache_dir)
+        print_success(f"已清理本次 Hugging Face 下载缓存: {cache_dir}")
+
+def download_huggingface_file(url, dest_path, cache_dir, hf_cli=None):
+    if os.path.exists(dest_path) and os.path.getsize(dest_path) > 0:
+        print_success(f"已存在，跳过: {dest_path} ({format_bytes(os.path.getsize(dest_path))})")
+        return "skipped"
+
+    try:
+        hf_ref = parse_huggingface_url(url)
+        hf_cli = hf_cli or ensure_hf_cli()
+        stage_dir = tempfile.mkdtemp(prefix="download-", dir=cache_dir)
+        hf_home = os.path.join(cache_dir, "hf-home")
+        env = {
+            **os.environ,
+            "HF_HOME": hf_home,
+            "HF_HUB_CACHE": os.path.join(hf_home, "hub"),
+            "HF_XET_CACHE": os.path.join(hf_home, "xet"),
+            "HF_ASSETS_CACHE": os.path.join(hf_home, "assets"),
+        }
+        print_info(f"使用 Hugging Face 官方 hf CLI 下载: {hf_ref['repo_id']}/{hf_ref['filename']}")
+        result = subprocess.run([
+            hf_cli,
+            "download",
+            hf_ref["repo_id"],
+            hf_ref["filename"],
+            "--revision", hf_ref["revision"],
+            "--local-dir", stage_dir,
+        ], env=env, text=True)
+        staged_file = os.path.join(stage_dir, hf_ref["filename"])
+        if result.returncode != 0 or not os.path.isfile(staged_file) or os.path.getsize(staged_file) == 0:
+            raise RuntimeError(f"hf download 失败，退出码: {result.returncode}")
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        os.replace(staged_file, dest_path)
+        print_success(f"下载完成: {dest_path} ({format_bytes(os.path.getsize(dest_path))})")
+        return "success"
+    except Exception as e:
+        print_error(f"Hugging Face 下载失败: {os.path.basename(dest_path)} - {e}")
+        return "failed"
+
 def get_response_filename(response):
     content_disposition = response.headers.get("Content-Disposition") or ""
     match = re.search(r"filename\*=UTF-8''([^;]+)", content_disposition)
@@ -915,29 +1000,55 @@ def _download_zimage_models_impl(model_specs, task_name="Z-Image 模型", cleanu
     if cleanup_obsolete:
         cleanup_obsolete_zimage_models()
     results = {"success": 0, "skipped": 0, "failed": 0}
-    for index, model_spec in enumerate(model_specs, start=1):
-        try:
-            dest_path = resolve_model_target_path(model_spec)
-        except Exception as e:
-            print_error(str(e))
-            results["failed"] += 1
-            continue
+    hf_cache_dir = None
+    hf_cli = None
+    hf_cli_unavailable = False
+    try:
+        for index, model_spec in enumerate(model_specs, start=1):
+            try:
+                dest_path = resolve_model_target_path(model_spec)
+            except Exception as e:
+                print_error(str(e))
+                results["failed"] += 1
+                continue
 
-        try:
-            download_url = build_model_download_url(model_spec)
-        except Exception as e:
-            print_error(str(e))
-            results["failed"] += 1
-            continue
-
-        display_name = os.path.basename(dest_path) if os.path.basename(dest_path) else "按服务端原始文件名保存"
-        print_info(f"[{index}/{len(model_specs)}] {model_spec['subdir']}/{display_name}")
-        status = download_file_with_progress(
-            download_url,
-            dest_path,
-            filename_from_response=model_spec.get("filename_from_response", False),
-        )
-        results[status] += 1
+            display_name = os.path.basename(dest_path) if os.path.basename(dest_path) else "按服务端原始文件名保存"
+            print_info(f"[{index}/{len(model_specs)}] {model_spec['subdir']}/{display_name}")
+            if parse_huggingface_url(model_spec["url"]):
+                if hf_cache_dir is None:
+                    hf_cache_dir = create_hf_task_cache(COMFYUI_MODELS_ROOT)
+                if not (os.path.exists(dest_path) and os.path.getsize(dest_path) > 0) and hf_cli_unavailable:
+                    results["failed"] += 1
+                    continue
+                if not (os.path.exists(dest_path) and os.path.getsize(dest_path) > 0) and hf_cli is None:
+                    try:
+                        hf_cli = ensure_hf_cli()
+                    except Exception as e:
+                        print_error(str(e))
+                        hf_cli_unavailable = True
+                        results["failed"] += 1
+                        continue
+                status = download_huggingface_file(
+                    model_spec["url"],
+                    dest_path,
+                    hf_cache_dir,
+                    hf_cli=hf_cli,
+                )
+            else:
+                try:
+                    download_url = build_model_download_url(model_spec)
+                except Exception as e:
+                    print_error(str(e))
+                    results["failed"] += 1
+                    continue
+                status = download_file_with_progress(
+                    download_url,
+                    dest_path,
+                    filename_from_response=model_spec.get("filename_from_response", False),
+                )
+            results[status] += 1
+    finally:
+        cleanup_hf_task_cache(hf_cache_dir)
 
     print("-" * 60)
     print_success(
@@ -1058,9 +1169,13 @@ def _import_qwen_model(port):
     gguf_path = os.path.join(GGUF_DIR, GGUF_FILENAME)
     if not os.path.exists(gguf_path):
         print_info("正在从 Hugging Face 下载 GGUF 文件 (4.3GB)...")
-        if not run_cmd(f"curl -L -o {gguf_path} {MODEL_URL}"):
-            print_error("GGUF 下载失败。")
-            return False
+        hf_cache_dir = create_hf_task_cache(GGUF_DIR)
+        try:
+            if download_huggingface_file(MODEL_URL, gguf_path, hf_cache_dir) != "success":
+                print_error("GGUF 下载失败。")
+                return False
+        finally:
+            cleanup_hf_task_cache(hf_cache_dir)
 
     modelfile = "/tmp/Modelfile_qwen"
     with open(modelfile, 'w') as f:

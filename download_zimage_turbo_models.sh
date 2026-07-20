@@ -20,6 +20,37 @@ SELECTED_DIFFUSION_NAME=""
 SELECTED_DIFFUSION_DOWNLOAD=""
 SELECTED_LORA_NAME=""
 SELECTED_LORA_DOWNLOAD=""
+HF_BIN=""
+HF_TASK_DIR=""
+
+cleanup_hf_cache() {
+  if [[ -n "$HF_TASK_DIR" && -d "$HF_TASK_DIR" && "$HF_TASK_DIR" == "$MODELS_DIR"/.vastai-hf-* ]]; then
+    rm -rf -- "$HF_TASK_DIR"
+    echo "已清理本次 Hugging Face 下载缓存：$HF_TASK_DIR"
+  fi
+  HF_TASK_DIR=""
+}
+
+trap cleanup_hf_cache EXIT INT TERM
+
+ensure_hf_cli() {
+  if [[ -x /venv/main/bin/hf ]]; then
+    HF_BIN=/venv/main/bin/hf
+    return 0
+  fi
+  if command -v hf >/dev/null 2>&1; then
+    HF_BIN="$(command -v hf)"
+    return 0
+  fi
+  if [[ ! -x /venv/main/bin/python ]] || ! command -v uv >/dev/null 2>&1; then
+    echo "错误：缺少 Hugging Face 官方 hf CLI，且无法通过 /venv/main + uv 自动安装。" >&2
+    return 1
+  fi
+  echo "正在通过 /venv/main 安装 Hugging Face 官方 CLI..."
+  uv pip --python /venv/main/bin/python --no-cache-dir install huggingface_hub
+  HF_BIN=/venv/main/bin/hf
+  [[ -x "$HF_BIN" ]]
+}
 
 normalize_choice() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr '_' '-'
@@ -86,41 +117,46 @@ select_lora_model() {
 download_file() {
   local url="$1"
   local target="$2"
-  local partial="${target}.part"
+  local rest repo remainder revision repo_file stage_dir staged_file
 
   if [[ -f "$target" ]]; then
     echo "跳过：已存在 $target"
     return 0
   fi
 
-  rm -f "$partial"
-  echo "下载：$target"
-
-  if command -v aria2c >/dev/null 2>&1; then
-    aria2c \
-      --continue=true \
-      --max-connection-per-server=8 \
-      --split=8 \
-      --min-split-size=64M \
-      --dir "$(dirname "$target")" \
-      --out "$(basename "$partial")" \
-      "$url"
-  elif command -v curl >/dev/null 2>&1; then
-    curl -L --fail --retry 5 --retry-delay 3 -o "$partial" "$url"
-  elif command -v wget >/dev/null 2>&1; then
-    wget --tries=5 --waitretry=3 -O "$partial" "$url"
-  else
-    echo "错误：未找到 aria2c、curl 或 wget，无法下载。" >&2
+  rest="${url#https://huggingface.co/}"
+  if [[ "$rest" == "$url" || "$rest" != */resolve/* ]]; then
+    echo "错误：不支持的 Hugging Face 下载地址：$url" >&2
     return 1
   fi
+  repo="${rest%%/resolve/*}"
+  remainder="${rest#*/resolve/}"
+  revision="${remainder%%/*}"
+  repo_file="${remainder#*/}"
+  stage_dir="$(mktemp -d "$HF_TASK_DIR/download-XXXXXX")"
 
-  mv "$partial" "$target"
+  echo "使用 Hugging Face 官方 hf CLI 下载：$repo/$repo_file"
+  HF_HOME="$HF_TASK_DIR/hf-home" \
+  HF_HUB_CACHE="$HF_TASK_DIR/hf-home/hub" \
+  HF_XET_CACHE="$HF_TASK_DIR/hf-home/xet" \
+  HF_ASSETS_CACHE="$HF_TASK_DIR/hf-home/assets" \
+    "$HF_BIN" download "$repo" "$repo_file" --revision "$revision" --local-dir "$stage_dir"
+
+  staged_file="$stage_dir/$repo_file"
+  if [[ ! -s "$staged_file" ]]; then
+    echo "错误：hf download 未生成有效文件：$repo_file" >&2
+    return 1
+  fi
+  mv "$staged_file" "$target"
   echo "完成：$target"
 }
 
 main() {
   echo "ComfyUI 目录：$COMFYUI_DIR"
   echo
+  mkdir -p "$MODELS_DIR"
+  HF_TASK_DIR="$(mktemp -d "$MODELS_DIR/.vastai-hf-XXXXXX")"
+  ensure_hf_cli
   select_diffusion_model
   select_lora_model
   echo "已选择 diffusion 模型：$SELECTED_DIFFUSION_NAME"
@@ -147,6 +183,8 @@ main() {
   done
 
   echo "Z-Image Turbo 模型文件检查完成。"
+  cleanup_hf_cache
+  trap - EXIT INT TERM
 }
 
 main "$@"
