@@ -14,14 +14,17 @@ MODELS_DIR="$COMFYUI_DIR/models"
 TEXT_ENCODER_DOWNLOAD="text_encoders|qwen_3_4b.safetensors|https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors"
 VAE_DOWNLOAD="vae|ae.safetensors|https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors"
 OFFICIAL_DIFFUSION_DOWNLOAD="diffusion_models|z_image_turbo_bf16.safetensors|https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/diffusion_models/z_image_turbo_bf16.safetensors"
+Z_ANIME_DIFFUSION_DOWNLOAD="diffusion_models|z-anime-distill-8step-bf16.safetensors|https://huggingface.co/SeeSee21/Z-Anime/resolve/main/diffusion_models/z-anime-distill-8step-bf16.safetensors"
 NSFW_2602_DIFFUSION_DOWNLOAD="diffusion_models|2602_NSFW_ZIT_BSY_bf16.safetensors|https://huggingface.co/wiikoo/checkpoint/resolve/main/tongyi/2602_NSFW_ZIT_BSY_bf16.safetensors"
 ZPENIS_V9_LORA_DOWNLOAD="loras|zpenis_v9_erect_limited_000033300.safetensors|https://huggingface.co/wiikoo/checkpoint/resolve/main/tongyi/zpenis_v9_erect_limited_000033300.safetensors"
 SELECTED_DIFFUSION_NAME=""
-SELECTED_DIFFUSION_DOWNLOAD=""
+SELECTED_DIFFUSION_DOWNLOADS=()
 SELECTED_LORA_NAME=""
 SELECTED_LORA_DOWNLOAD=""
 HF_BIN=""
 HF_TASK_DIR=""
+VENV_PYTHON="${VAST_VENV_PYTHON:-/venv/main/bin/python}"
+VENV_HF="${VAST_VENV_HF:-/venv/main/bin/hf}"
 
 cleanup_hf_cache() {
   if [[ -n "$HF_TASK_DIR" && -d "$HF_TASK_DIR" && "$HF_TASK_DIR" == "$MODELS_DIR"/.vastai-hf-* ]]; then
@@ -34,22 +37,47 @@ cleanup_hf_cache() {
 trap cleanup_hf_cache EXIT INT TERM
 
 ensure_hf_cli() {
-  if [[ -x /venv/main/bin/hf ]]; then
-    HF_BIN=/venv/main/bin/hf
+  if hf_runtime_ready "$VENV_PYTHON" "$VENV_HF"; then
+    HF_BIN="$VENV_HF"
     return 0
   fi
-  if command -v hf >/dev/null 2>&1; then
-    HF_BIN="$(command -v hf)"
+  local path_hf path_python
+  path_hf="$(command -v hf 2>/dev/null || true)"
+  path_python="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
+  if hf_runtime_ready "$path_python" "$path_hf"; then
+    HF_BIN="$path_hf"
     return 0
   fi
-  if [[ ! -x /venv/main/bin/python ]] || ! command -v uv >/dev/null 2>&1; then
-    echo "错误：缺少 Hugging Face 官方 hf CLI，且无法通过 /venv/main + uv 自动安装。" >&2
+  if [[ ! -x "$VENV_PYTHON" ]] || ! command -v uv >/dev/null 2>&1; then
+    echo "错误：缺少 Hugging Face 官方 hf CLI/hf-xet，且无法通过 /venv/main + uv 自动安装。" >&2
     return 1
   fi
-  echo "正在通过 /venv/main 安装 Hugging Face 官方 CLI..."
-  uv pip --python /venv/main/bin/python --no-cache-dir install huggingface_hub
-  HF_BIN=/venv/main/bin/hf
-  [[ -x "$HF_BIN" ]]
+  echo "正在通过 /venv/main 安装/升级 Hugging Face 官方 CLI 和 hf-xet..."
+  uv pip --python "$VENV_PYTHON" --no-cache-dir install --upgrade "huggingface_hub>=0.32.0" hf-xet
+  if ! hf_runtime_ready "$VENV_PYTHON" "$VENV_HF"; then
+    echo "错误：Hugging Face 官方 hf CLI 或 hf-xet 安装失败。" >&2
+    return 1
+  fi
+  HF_BIN="$VENV_HF"
+}
+
+hf_runtime_ready() {
+  local python_path="$1"
+  local hf_path="$2"
+  [[ -n "$python_path" && -n "$hf_path" && -x "$python_path" && -x "$hf_path" ]] || return 1
+  "$python_path" - <<'PY' >/dev/null 2>&1
+import importlib
+import sys
+from importlib.metadata import version
+
+try:
+    importlib.import_module("hf_xet")
+    parts = tuple(int(part) for part in version("huggingface_hub").split(".")[:2])
+except Exception:
+    sys.exit(1)
+
+sys.exit(0 if parts >= (0, 32) else 1)
+PY
 }
 
 normalize_choice() {
@@ -61,26 +89,53 @@ select_diffusion_model() {
 
   if [[ -z "$choice" && -t 0 ]]; then
     echo "请选择 diffusion_models 模型来源："
-    echo "  1. 官方 Z-Image-Turbo BF16"
-    echo "  2. 2602 NSFW ZIT BSY BF16"
+    echo "  1. 官方模型包（官方 Z-Image-Turbo BF16 + Z-Anime Distill 8step BF16）"
+    echo "  2. 其他 Z-Image 系列模型"
     read -r -p "请选择 [1-2，默认 1]: " choice
   fi
 
   choice="$(normalize_choice "$choice")"
 
   case "$choice" in
-    ""|1|official|default|turbo)
-      SELECTED_DIFFUSION_NAME="官方 Z-Image-Turbo BF16"
-      SELECTED_DIFFUSION_DOWNLOAD="$OFFICIAL_DIFFUSION_DOWNLOAD"
+    ""|1|official|default|turbo|bundle)
+      SELECTED_DIFFUSION_NAME="官方模型包（官方 Z-Image-Turbo BF16 + Z-Anime Distill 8step BF16）"
+      SELECTED_DIFFUSION_DOWNLOADS=("$OFFICIAL_DIFFUSION_DOWNLOAD" "$Z_ANIME_DIFFUSION_DOWNLOAD")
       ;;
-    2|2602|2602-nsfw|nsfw|tongyi|bsy)
+    2|other|others|series|z-image|zimage)
+      select_other_diffusion_model
+      ;;
+    2602|2602-nsfw|nsfw|tongyi|bsy)
       SELECTED_DIFFUSION_NAME="2602 NSFW ZIT BSY BF16"
-      SELECTED_DIFFUSION_DOWNLOAD="$NSFW_2602_DIFFUSION_DOWNLOAD"
+      SELECTED_DIFFUSION_DOWNLOADS=("$NSFW_2602_DIFFUSION_DOWNLOAD")
       ;;
     *)
-      echo "无效选择：$choice，默认使用官方 Z-Image-Turbo BF16。"
-      SELECTED_DIFFUSION_NAME="官方 Z-Image-Turbo BF16"
-      SELECTED_DIFFUSION_DOWNLOAD="$OFFICIAL_DIFFUSION_DOWNLOAD"
+      echo "无效选择：$choice，默认使用官方模型包。"
+      SELECTED_DIFFUSION_NAME="官方模型包（官方 Z-Image-Turbo BF16 + Z-Anime Distill 8step BF16）"
+      SELECTED_DIFFUSION_DOWNLOADS=("$OFFICIAL_DIFFUSION_DOWNLOAD" "$Z_ANIME_DIFFUSION_DOWNLOAD")
+      ;;
+  esac
+}
+
+select_other_diffusion_model() {
+  local choice="${ZIMAGE_TURBO_OTHER_VARIANT:-}"
+
+  if [[ -z "$choice" && -t 0 ]]; then
+    echo "请选择其他 Z-Image 系列模型："
+    echo "  1. 2602 NSFW ZIT BSY BF16"
+    read -r -p "请选择 [1，默认 1]: " choice
+  fi
+
+  choice="$(normalize_choice "$choice")"
+
+  case "$choice" in
+    ""|1|2602|2602-nsfw|nsfw|tongyi|bsy)
+      SELECTED_DIFFUSION_NAME="2602 NSFW ZIT BSY BF16"
+      SELECTED_DIFFUSION_DOWNLOADS=("$NSFW_2602_DIFFUSION_DOWNLOAD")
+      ;;
+    *)
+      echo "无效选择：$choice，默认使用 2602 NSFW ZIT BSY BF16。"
+      SELECTED_DIFFUSION_NAME="2602 NSFW ZIT BSY BF16"
+      SELECTED_DIFFUSION_DOWNLOADS=("$NSFW_2602_DIFFUSION_DOWNLOAD")
       ;;
   esac
 }
@@ -165,7 +220,7 @@ main() {
 
   DOWNLOADS=(
     "$TEXT_ENCODER_DOWNLOAD"
-    "$SELECTED_DIFFUSION_DOWNLOAD"
+    "${SELECTED_DIFFUSION_DOWNLOADS[@]}"
     "$VAE_DOWNLOAD"
   )
   if [[ -n "$SELECTED_LORA_DOWNLOAD" ]]; then

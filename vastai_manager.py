@@ -66,13 +66,21 @@ ZIMAGE_TURBO_VAE_MODEL = {
     "subdir": "vae",
     "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
 }
-ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS = [
+ZIMAGE_TURBO_OFFICIAL_DIFFUSION_MODELS = [
     {
         "key": "official",
         "name": "官方 Z-Image-Turbo BF16",
         "subdir": "diffusion_models",
         "url": "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/diffusion_models/z_image_turbo_bf16.safetensors",
     },
+    {
+        "key": "z-anime",
+        "name": "Z-Anime Distill 8step BF16",
+        "subdir": "diffusion_models",
+        "url": "https://huggingface.co/SeeSee21/Z-Anime/resolve/main/diffusion_models/z-anime-distill-8step-bf16.safetensors",
+    },
+]
+ZIMAGE_TURBO_OTHER_DIFFUSION_MODELS = [
     {
         "key": "2602-nsfw",
         "name": "2602 NSFW ZIT BSY BF16",
@@ -96,7 +104,7 @@ ZIMAGE_TURBO_LORA_MODEL_OPTIONS = [
 ]
 ZIMAGE_TURBO_MODELS = [
     ZIMAGE_TURBO_TEXT_ENCODER_MODEL,
-    ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS[0],
+    *ZIMAGE_TURBO_OFFICIAL_DIFFUSION_MODELS,
     ZIMAGE_TURBO_VAE_MODEL,
 ]
 
@@ -712,13 +720,18 @@ def format_bytes(size):
 def get_zimage_model_specs():
     return ZIMAGE_MODELS
 
-def get_zimage_turbo_diffusion_option(choice=None):
+def get_zimage_turbo_diffusion_options(choice=None, other_choice=None):
     normalized = (choice or "").strip().lower().replace("_", "-")
-    if normalized in ("", "1", "official", "default", "turbo"):
-        return dict(ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS[0])
-    if normalized in ("2", "2602", "2602-nsfw", "nsfw", "tongyi", "bsy"):
-        return dict(ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS[1])
-    return None
+    if normalized in ("", "1", "official", "default", "turbo", "bundle"):
+        return [dict(model) for model in ZIMAGE_TURBO_OFFICIAL_DIFFUSION_MODELS]
+    if normalized in ("2", "other", "others", "series", "z-image", "zimage"):
+        other_normalized = (other_choice or "2602").strip().lower().replace("_", "-")
+        if other_normalized in ("", "1", "2602", "2602-nsfw", "nsfw", "tongyi", "bsy"):
+            return [dict(ZIMAGE_TURBO_OTHER_DIFFUSION_MODELS[0])]
+        return []
+    if normalized in ("2602", "2602-nsfw", "nsfw", "tongyi", "bsy"):
+        return [dict(ZIMAGE_TURBO_OTHER_DIFFUSION_MODELS[0])]
+    return []
 
 def get_zimage_turbo_lora_option(choice=None):
     normalized = (choice or "").strip().lower().replace("_", "-")
@@ -728,31 +741,42 @@ def get_zimage_turbo_lora_option(choice=None):
         return dict(ZIMAGE_TURBO_LORA_MODEL_OPTIONS[1])
     return None
 
-def choose_zimage_turbo_diffusion_model():
+def choose_zimage_turbo_diffusion_models():
     env_choice = os.environ.get("ZIMAGE_TURBO_DIFFUSION_VARIANT")
     if env_choice:
-        option = get_zimage_turbo_diffusion_option(env_choice)
-        if option:
-            print_info(f"使用环境变量 ZIMAGE_TURBO_DIFFUSION_VARIANT={env_choice}: {option['name']}")
-            return option
-        print_warning(f"无效的 ZIMAGE_TURBO_DIFFUSION_VARIANT={env_choice}，默认选择官方模型。")
-        return get_zimage_turbo_diffusion_option("official")
+        other_choice = os.environ.get("ZIMAGE_TURBO_OTHER_VARIANT")
+        options = get_zimage_turbo_diffusion_options(env_choice, other_choice)
+        if options:
+            print_info(
+                "使用环境变量 ZIMAGE_TURBO_DIFFUSION_VARIANT="
+                f"{env_choice}: {', '.join(option['name'] for option in options)}"
+            )
+            return options
+        print_warning(f"无效的 ZIMAGE_TURBO_DIFFUSION_VARIANT={env_choice}，默认选择官方模型包。")
+        return get_zimage_turbo_diffusion_options("official")
 
     if not sys.stdin.isatty():
-        option = get_zimage_turbo_diffusion_option("official")
-        print_info(f"未检测到交互输入，默认选择: {option['name']}")
-        return option
+        options = get_zimage_turbo_diffusion_options("official")
+        print_info(f"未检测到交互输入，默认选择: {', '.join(option['name'] for option in options)}")
+        return options
 
     print("请选择 diffusion_models 模型来源：")
-    for index, option in enumerate(ZIMAGE_TURBO_DIFFUSION_MODEL_OPTIONS, start=1):
-        print(f"  {index}. {option['name']}")
+    print("  1. 官方模型包（官方 Z-Image-Turbo BF16 + Z-Anime Distill 8step BF16）")
+    print("  2. 其他 Z-Image 系列模型")
     choice = input("请选择 [1-2，默认 1]: ").strip()
-    option = get_zimage_turbo_diffusion_option(choice)
-    if not option:
-        print_warning("无效选择，默认选择官方模型。")
-        option = get_zimage_turbo_diffusion_option("official")
-    print_info(f"已选择 diffusion: {option['name']}")
-    return option
+    normalized = choice.strip().lower().replace("_", "-")
+    other_choice = None
+    if normalized in ("2", "other", "others", "series", "z-image", "zimage"):
+        print("请选择其他 Z-Image 系列模型：")
+        for index, option in enumerate(ZIMAGE_TURBO_OTHER_DIFFUSION_MODELS, start=1):
+            print(f"  {index}. {option['name']}")
+        other_choice = input("请选择 [1，默认 1]: ").strip()
+    options = get_zimage_turbo_diffusion_options(choice, other_choice)
+    if not options:
+        print_warning("无效选择，默认选择官方模型包。")
+        options = get_zimage_turbo_diffusion_options("official")
+    print_info(f"已选择 diffusion: {', '.join(option['name'] for option in options)}")
+    return options
 
 def choose_zimage_turbo_lora_model():
     env_choice = os.environ.get("ZIMAGE_TURBO_LORA_VARIANT")
@@ -780,10 +804,11 @@ def choose_zimage_turbo_lora_model():
     print_info(f"已选择 LoRA: {option['name']}")
     return option
 
-def get_zimage_turbo_model_specs(diffusion_option=None, lora_option=None):
+def get_zimage_turbo_model_specs(diffusion_options=None, lora_option=None):
+    diffusion_options = diffusion_options or get_zimage_turbo_diffusion_options("official")
     specs = [
         dict(ZIMAGE_TURBO_TEXT_ENCODER_MODEL),
-        dict(diffusion_option or get_zimage_turbo_diffusion_option("official")),
+        *[dict(option) for option in diffusion_options],
         dict(ZIMAGE_TURBO_VAE_MODEL),
     ]
     if lora_option and lora_option.get("url"):
@@ -832,30 +857,56 @@ def parse_huggingface_url(url):
         "filename": urllib.parse.unquote("/".join(parts[4:])),
     }
 
-def ensure_hf_cli():
-    candidates = ["/venv/main/bin/hf", shutil.which("hf")]
-    for candidate in candidates:
-        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
+def hf_runtime_ready(python_path, hf_path):
+    if not python_path or not hf_path:
+        return False
+    if not os.path.isfile(python_path) or not os.access(python_path, os.X_OK):
+        return False
+    if not os.path.isfile(hf_path) or not os.access(hf_path, os.X_OK):
+        return False
+    script = (
+        "import importlib, sys\n"
+        "from importlib.metadata import version\n"
+        "try:\n"
+        "    importlib.import_module('hf_xet')\n"
+        "    hub_version = version('huggingface_hub')\n"
+        "    parts = tuple(int(part) for part in hub_version.split('.')[:2])\n"
+        "except Exception:\n"
+        "    sys.exit(1)\n"
+        "sys.exit(0 if parts >= (0, 32) else 1)\n"
+    )
+    result = subprocess.run([python_path, "-c", script], text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return result.returncode == 0
 
+def ensure_hf_cli():
     venv_python = "/venv/main/bin/python"
+    venv_hf = "/venv/main/bin/hf"
+    if hf_runtime_ready(venv_python, venv_hf):
+        return venv_hf
+
+    path_hf = shutil.which("hf")
+    path_python = shutil.which("python3") or shutil.which("python")
+    if hf_runtime_ready(path_python, path_hf):
+        return path_hf
+
     uv_path = shutil.which("uv")
     if not os.path.isfile(venv_python) or not uv_path:
-        raise RuntimeError("缺少 Hugging Face 官方 hf CLI，且无法通过 /venv/main + uv 自动安装。")
+        raise RuntimeError("缺少 Hugging Face 官方 hf CLI/hf-xet，且无法通过 /venv/main + uv 自动安装。")
 
-    print_info("正在通过 /venv/main 安装 Hugging Face 官方 CLI...")
+    print_info("正在通过 /venv/main 安装/升级 Hugging Face 官方 CLI 和 hf-xet...")
     install = subprocess.run([
         uv_path,
         "pip",
         "--python", venv_python,
         "--no-cache-dir",
         "install",
-        "huggingface_hub",
+        "--upgrade",
+        "huggingface_hub>=0.32.0",
+        "hf-xet",
     ], text=True)
-    hf_path = "/venv/main/bin/hf"
-    if install.returncode != 0 or not os.path.isfile(hf_path):
+    if install.returncode != 0 or not hf_runtime_ready(venv_python, venv_hf):
         raise RuntimeError("Hugging Face 官方 hf CLI 安装失败。")
-    return hf_path
+    return venv_hf
 
 def create_hf_task_cache(base_dir):
     os.makedirs(base_dir, exist_ok=True)
@@ -1067,9 +1118,9 @@ def download_zimage_turbo_models():
     print_banner()
     print_info("下载 ComfyUI Z-Image-Turbo 模型（diffusion/LoRA 可选，其他默认）")
     print_info(f"目标根目录: {COMFYUI_MODELS_ROOT}")
-    diffusion_option = choose_zimage_turbo_diffusion_model()
+    diffusion_options = choose_zimage_turbo_diffusion_models()
     lora_option = choose_zimage_turbo_lora_model()
-    _download_zimage_models_impl(get_zimage_turbo_model_specs(diffusion_option, lora_option))
+    _download_zimage_models_impl(get_zimage_turbo_model_specs(diffusion_options, lora_option))
     input("\n按回车键返回菜单...")
 
 def is_running(port):
@@ -1504,9 +1555,9 @@ if __name__ == "__main__":
             ok = _download_zimage_models_impl(get_zimage_model_specs())
             sys.exit(0 if ok else 1)
         elif args.action == "download-zimage-turbo-models":
-            diffusion_option = choose_zimage_turbo_diffusion_model()
+            diffusion_options = choose_zimage_turbo_diffusion_models()
             lora_option = choose_zimage_turbo_lora_model()
-            ok = _download_zimage_models_impl(get_zimage_turbo_model_specs(diffusion_option, lora_option))
+            ok = _download_zimage_models_impl(get_zimage_turbo_model_specs(diffusion_options, lora_option))
             sys.exit(0 if ok else 1)
         elif args.action == "download-qwen-rapid-model":
             ok = _download_zimage_models_impl([QWEN_RAPID_AIO_MODEL])
