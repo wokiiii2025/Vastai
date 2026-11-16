@@ -1,0 +1,19 @@
+services:
+  image-api:
+    build: .
+    env_file: .env
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8080}:8080"
+    extra_hosts:
+      host.docker.internal: host-gateway
+    volumes:
+      - image-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/readyz', timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  image-data:
