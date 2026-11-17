@@ -16,7 +16,6 @@ Use --plan to list the download sources and destination paths.
 
 Repeat --optional NAME to add any of these files:
   vagina-lora      Qwen 2.1 Vagina v2.0
-  fineview-fp8     FineView STORY3 REDQW21 v2 TI2I, FP8
   fineview-int8c   FineView STORY3 REDQW21 v2 TI2I, INT8C
   coachbate-lora   CoachBate Qwen Image 2.1 v1
 Use --optional-only with --optional to install just the selected extras.
@@ -42,8 +41,8 @@ while (( $# )); do
         --plan) plan=true; shift ;;
         --optional)
             case "${2:-}" in
-                vagina-lora|fineview-fp8|fineview-int8c|coachbate-lora) selected["$2"]=yes ;;
-                *) fail '--optional requires vagina-lora, fineview-fp8, fineview-int8c, or coachbate-lora' ;;
+                vagina-lora|fineview-int8c|coachbate-lora) selected["$2"]=yes ;;
+                *) fail '--optional requires vagina-lora, fineview-int8c, or coachbate-lora' ;;
             esac
             shift 2
             ;;
@@ -175,7 +174,6 @@ while IFS='|' read -r name relative_path bytes digest url; do
     fi
 done <<'OPTIONAL_MODELS'
 vagina-lora|loras/pussyV2.safetensors|83943904|403121922c6dd013504e126baafa42e5afee49d85422c0cd122b29696063fa61|https://civitai.com/api/download/models/3377365?fileId=3265734
-fineview-fp8|diffusion_models/REDQW21-UNLOCKED-v2-FP8-ComfyMCP-builtwithqwen.safetensors|7116801326|0efb5aeb2b372025042e320c2e35c66ec6681ef54ad5de88a652ab19cc63ad92|https://civitai.com/api/download/models/3370753?fileId=3258921
 fineview-int8c|diffusion_models/REDQW21-UNLOCKED-v2-INT8C-ComfyMCP-builtwithqwen.safetensors|7256795720|30532b445eabd4b84b108168b6b3fe720535ef400f6bf9d68bd551817d3531a3|https://civitai.com/api/download/models/3370753?fileId=3258922
 coachbate-lora|loras/qwen-image-2.1_penis_coachbate_preview1.safetensors|159436160|0f79fae880ba2b89960676e036dfee1fea6020f7acbf6d1a333dc14b477cdeeb|https://civitai.com/api/download/models/3344536?fileId=3232190
 OPTIONAL_MODELS
