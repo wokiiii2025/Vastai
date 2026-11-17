@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Install the six Qwen-Image-2.1 model files for an existing Vast.ai ComfyUI.
+# Install the Qwen-Image-2.1 model files for an existing Vast.ai ComfyUI.
 set -euo pipefail
 
 usage() {
     cat <<'HELP'
 Usage: bash install.sh [--plan] [--comfyui-dir DIR]
 
-Install the Qwen-Image-2.1 checkpoint, text encoder, VAE, and three LoRAs (~16.8 GiB).
+Install the Qwen-Image-2.1 checkpoint, two text encoders, VAE, and three LoRAs (~28.3 GiB).
 The default destination is /workspace/ComfyUI/models. Override it with
 COMFYUI_DIR or --comfyui-dir. Set HF_TOKEN if Hugging Face requires authentication.
-Set CIVITAI_API_TOKEN to download the 8-step LoRA from Civitai. An existing
-verified copy in models/loras or QWEN21_MERGE_SOURCE (file path or HTTPS URL)
-can also supply the 8-step LoRA.
+Set CIVITAI_API_TOKEN to download the 8-step LoRA and Qwen3.5 9B encoder
+from Civitai. An existing verified copy in models/loras or QWEN21_MERGE_SOURCE
+(file path or HTTPS URL) can also supply the 8-step LoRA.
 Use --plan to list the download sources and destination paths.
 HELP
 }
@@ -65,7 +65,7 @@ download() {
         https://huggingface.co/*) token="${HF_TOKEN:-}" ;;
         https://civitai.com/api/download/*|https://civitai.red/api/download/*)
             token="${CIVITAI_API_TOKEN:-}"
-            [[ -n "$token" ]] || fail 'Set CIVITAI_API_TOKEN to download the 8-step LoRA from Civitai.'
+            [[ -n "$token" ]] || fail 'Set CIVITAI_API_TOKEN to download model files from Civitai.'
             ;;
     esac
     if [[ -n "$token" ]]; then
@@ -136,11 +136,12 @@ done <<'MODELS'
 loras/QwenImage_8Step_merge.safetensors|637586048|3a18527010d95101746845d9ccf1a4bb7e5df090b144aefdaef1db6999f25f68|https://civitai.com/api/download/models/3362980?fileId=3250799
 diffusion_models/NoctQ_V4_int8_convrot.safetensors|7256784368|4d92d5538253ab36e6a73b056cce5f697950f4303cb9e6686a3198d0ea13f9e8|https://huggingface.co/Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1/resolve/a81b9af51120a78e285e57906f2250a2a02080e9/NoctQ_V4_int8_convrot.safetensors
 text_encoders/qwen3vl_8b_int8_convrot_heretic.safetensors|9350828392|f15ce4275428e04f42cdb59e3a253cb290cae5de99259527f01d3d2e51153653|https://huggingface.co/pottokao/Qwen-Image-2.1-Text-Encoder-Heretic-int8-convrot/resolve/033b4bf23f8816b22c065309bc9b349953193978/qwen3vl_8b_int8_convrot_heretic.safetensors
+text_encoders/qwen3.5_9b_uncensored_int8_convrot.safetensors|12341908719|273a01295787728011797cfec0a62b43a877e30ff237d87ee238758381d66a2a|https://civitai.com/api/download/models/3416420?fileId=3309482
 vae/qwen_image_2.1_vae_bf16.safetensors|675509688|bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9|https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/aacf31a6d48e707f352ecba714cee0680da3479b/vae/qwen_image_2.1_vae_bf16.safetensors
 loras/qwen_image_2.1_lightning_4step.safetensors|67144280|53c69320d4163da51032f90275074028cb098556039c72b45f8dce9f0f9e34a3|https://huggingface.co/lightx2v/Qwen-Image-2.1-Lightning/resolve/6b0a1176327c01522a44276c5da67331a025b6fc/pytorch_lora_weights.safetensors
 loras/Qwen-Image-2.1 NSFW Image Edit.safetensors|83943552|9c143cbfe7b016efdce7499506c02d0bfa1842ae6524bb64e05888f2e325e67a|https://huggingface.co/mpasila/Qwen-Image-2.1-LoRAs/resolve/401c3423daed3d678eb7bb6477eb695ba0a01f4d/Qwen-Image-2.1%20NSFW%20Image%20Edit.safetensors
 MODELS
 
 if ! "$plan"; then
-    printf 'All six Qwen-Image-2.1 model files are ready in %s\n' "$models_dir"
+    printf 'Qwen-Image-2.1 model files are ready in %s\n' "$models_dir"
 fi
