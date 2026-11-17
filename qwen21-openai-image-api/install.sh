@@ -96,7 +96,7 @@ download() {
 
 install_model() {
     local target="$1" bytes="$2" digest="$3" source="$4"
-    local partial="${target%/*}/.${target##*/}.qwen21.part" attempt
+    local partial="${target%/*}/.${target##*/}.qwen21.part" attempt status
 
     if [[ -e "$target" || -L "$target" ]]; then
         matches "$target" "$bytes" "$digest" || fail "Existing model failed verification: $target"
@@ -121,8 +121,17 @@ install_model() {
             break
         fi
         printf 'Downloading: %s (%s/4)\n' "$target" "$attempt"
-        if download "$source" "$partial"; then
+        status=0
+        download "$source" "$partial" || status=$?
+        if (( status == 0 )); then
             break
+        fi
+        if (( status == 33 )) && [[ -s "$partial" ]]; then
+            printf 'Source does not support resuming %s; restarting this download.\n' "$target" >&2
+            : > "$partial"
+            if download "$source" "$partial"; then
+                break
+            fi
         fi
         if (( attempt < 4 )); then
             sleep "$((attempt * 2))"
@@ -142,14 +151,16 @@ install_model() {
 
 process_model() {
     local relative_path="$1" bytes="$2" digest="$3" url="$4"
-    local target="$models_dir/$relative_path" source
+    local target="$models_dir/$relative_path" source="$url"
+    if [[ "$relative_path" == loras/QwenImage_8Step_merge.safetensors ]]; then
+        source="${QWEN21_MERGE_SOURCE:-$url}"
+    fi
     if "$plan"; then
-        printf '%s (%s bytes)\n  %s\n' "$target" "$bytes" "$url"
-    else
-        source="$url"
-        if [[ "$relative_path" == loras/QwenImage_8Step_merge.safetensors ]]; then
-            source="${QWEN21_MERGE_SOURCE:-$url}"
+        if [[ "$source" != "$url" && "$source" == https://* ]]; then
+            source='HTTPS URL from QWEN21_MERGE_SOURCE'
         fi
+        printf '%s (%s bytes)\n  %s\n' "$target" "$bytes" "$source"
+    else
         install_model "$target" "$bytes" "$digest" "$source"
     fi
 }
