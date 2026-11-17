@@ -9,9 +9,10 @@ Usage: bash install.sh [--plan] [--comfyui-dir DIR] [--optional NAME]... [--opti
 Install the Qwen-Image-2.1 checkpoint, two text encoders, VAE, and three LoRAs (~28.3 GiB).
 The default destination is /workspace/ComfyUI/models. Override it with
 COMFYUI_DIR or --comfyui-dir. Set HF_TOKEN if Hugging Face requires authentication.
-Set CIVITAI_API_TOKEN for Civitai downloads. An existing verified copy in
-models/loras or QWEN21_MERGE_SOURCE (file path or HTTPS URL) can also supply
-the 8-step LoRA.
+Civitai downloads prompt for a hidden API token when needed.
+Set CIVITAI_API_TOKEN to skip the prompt or run without a terminal.
+An existing verified copy in models/loras or QWEN21_MERGE_SOURCE
+(file path or HTTPS URL) can also supply the 8-step LoRA.
 Use --plan to list the download sources and destination paths.
 
 Repeat --optional NAME to add any of these files:
@@ -73,6 +74,21 @@ matches() {
     [[ "$actual" == "$expected" ]]
 }
 
+civitai_token="${CIVITAI_API_TOKEN:-}"
+
+require_civitai_token() {
+    [[ -z "$civitai_token" ]] || return 0
+
+    local terminal status=0
+    if ! { exec {terminal}<>/dev/tty; } 2>/dev/null; then
+        fail 'Set CIVITAI_API_TOKEN for Civitai downloads without a terminal.'
+    fi
+    IFS= read -rsp 'Enter Civitai API token (hidden): ' civitai_token <&"$terminal" 2>&"$terminal" || status=$?
+    printf '\n' >&"$terminal"
+    exec {terminal}>&-
+    (( status == 0 )) && [[ -n "$civitai_token" ]] || fail 'A Civitai API token is required.'
+}
+
 download() {
     local url="$1" partial="$2" token=''
     local -a options=(
@@ -83,8 +99,8 @@ download() {
     case "$url" in
         https://huggingface.co/*) token="${HF_TOKEN:-}" ;;
         https://civitai.com/api/download/*|https://civitai.red/api/download/*)
-            token="${CIVITAI_API_TOKEN:-}"
-            [[ -n "$token" ]] || fail 'Set CIVITAI_API_TOKEN to download model files from Civitai.'
+            require_civitai_token
+            token="$civitai_token"
             ;;
     esac
     if [[ -n "$token" ]]; then
